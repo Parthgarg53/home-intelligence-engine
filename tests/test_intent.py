@@ -71,6 +71,26 @@ def test_completed_intent_cannot_be_cancelled():
         intent.cancel()
 
 
+def test_expired_intent_cannot_be_completed():
+    deadline = datetime(2030, 1, 1, tzinfo=timezone.utc)
+    intent = make_intent(expires_at=deadline)
+
+    with pytest.raises(ValueError, match="current status is expired"):
+        intent.complete(now=deadline)
+
+    assert intent.status == IntentStatus.EXPIRED
+
+
+def test_expired_intent_cannot_be_cancelled():
+    deadline = datetime(2030, 1, 1, tzinfo=timezone.utc)
+    intent = make_intent(expires_at=deadline)
+
+    with pytest.raises(ValueError, match="current status is expired"):
+        intent.cancel(now=deadline)
+
+    assert intent.status == IntentStatus.EXPIRED
+
+
 def test_naive_expiry_timestamp_is_rejected():
     with pytest.raises(ValueError):
         make_intent(expires_at=datetime(2030, 1, 1))

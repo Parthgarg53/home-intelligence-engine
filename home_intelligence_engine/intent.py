@@ -37,14 +37,16 @@ class Intent(BaseModel):
                 raise ValueError(f"{field_name} must include a timezone")
         return self
 
-    def complete(self) -> None:
+    def complete(self, now: datetime | None = None) -> None:
+        self.refresh_expiry(now)
         if self.status != IntentStatus.ACTIVE:
-            raise ValueError("Only active intents can be completed")
+            raise ValueError(f"Only active intents can be completed; current status is {self.status.value}")
         self.status = IntentStatus.COMPLETED
 
-    def cancel(self) -> None:
+    def cancel(self, now: datetime | None = None) -> None:
+        self.refresh_expiry(now)
         if self.status != IntentStatus.ACTIVE:
-            raise ValueError("Only active intents can be cancelled")
+            raise ValueError(f"Only active intents can be cancelled; current status is {self.status.value}")
         self.status = IntentStatus.CANCELLED
 
     def refresh_expiry(self, now: datetime | None = None) -> None:
