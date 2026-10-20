@@ -1,41 +1,62 @@
 # Home Intelligence Engine
 
-Home Intelligence Engine is a small Python project for representing and managing smart-home instructions over time. Its focus is **intent lifecycle management**: distinguishing a one-time request from an instruction that remains active, expires, or is cancelled.
+**A lifecycle-aware intelligence layer for the smart home.**
 
-The project is being built in small, testable milestones. The current foundation contains an intent model and SQLite persistence. Device execution, condition evaluation, MCP tools, and natural-language planning are future work.
+Home Intelligence Engine is designed to understand what a person wants their home to do, how long that instruction should remain in effect, when it is allowed to run, and what happened when the system acted. It treats an instruction as managed intent—not simply a sentence to translate into a device command.
 
-## Current capabilities
+## The idea
 
-- Models four intent kinds: one-time action, conditional one-shot, persistent automation, and temporary override.
-- Tracks active, completed, cancelled, and expired statuses.
-- Requires timezone-aware creation, expiry, and supplied clock timestamps.
-- Applies an intent's expiry before completing or cancelling it, so an expired intent cannot make either transition.
-- Persists intent records in SQLite and can load active records for runtime recovery.
-- Records status transitions in a separate history table and rejects stale updates when the stored status has changed.
+Smart-home requests have different lifetimes. “Turn off the living room light” is a one-time action. “Turn it off if it gets sunny today” is a conditional request with a deadline. “Whenever it gets sunny” is an ongoing automation. “Keep it on for two hours” is a temporary override of normal behavior.
 
-An intent status describes the lifecycle of a request. It does not prove that a physical device changed state; device adapters and execution outcome records have not been implemented yet.
+The engine is intended to represent these requests explicitly, manage their lifecycle, coordinate execution, and explain its decisions. Users should be able to understand whether an instruction is waiting, active, completed, cancelled, or expired—and why.
 
-## Project layout
+## Product principles
 
-```text
-home_intelligence_engine/
-├── intent.py       # Intent kinds, statuses, validation, and lifecycle methods
-└── persistence.py  # SQLite repository and transition history
-tests/
-├── test_intent.py
-└── test_persistence.py
-```
+- **Intent has a lifecycle.** Every request has a clear type, status, validity window, and permitted transitions.
+- **Actions are accountable.** Requested, planned, attempted, and verified outcomes remain distinct. A command being sent is not proof that a device changed state.
+- **Failures stay visible.** Condition-evaluation and device failures must not be reported as successful completion. Retry and recovery behavior should be explicit.
+- **Conflicts are explainable.** Temporary overrides and competing instructions should follow defined precedence rules, with a reason for any suppressed action.
+- **Time is testable.** Time-dependent behavior uses an injectable clock so deadlines and recovery can be checked deterministically.
+- **Interfaces share the same rules.** MCP tools, a future natural-language planner, and other clients should call the same application services rather than bypassing lifecycle and execution controls.
+- **The foundation stays small.** The engine favors clear Python modules and well-defined interfaces over premature services, schedulers, or frameworks.
 
-## Requirements
+## Intended capabilities
 
-- Python 3.11 or newer
-- Dependencies listed in `pyproject.toml`
+1. **Intent lifecycle** — model one-time actions, conditional one-shots, persistent automations, and temporary overrides; validate transitions, deadlines, and cancellation.
+2. **Durable state** — persist intent state and transition history in SQLite, and recover active work after restart.
+3. **Reliable execution** — validate eligibility, execute through device adapters, capture outcomes, and apply explicit retry and idempotency policies.
+4. **Conditions and conflicts** — evaluate time-bounded conditions, resolve competing instructions, restore normal behavior after overrides, and explain decisions.
+5. **MCP access** — expose selected operations through thin, validated tools that use the same application services.
+6. **Natural-language planning** — translate requests into structured proposals, ask clarifying questions when needed, and require validation before accepting or executing a proposal.
 
-SQLite uses Python's standard library, so it does not require a separate database server.
+Longer-term goals—such as balancing comfort, preferences, and energy use across devices—can build on these foundations once lifecycle and execution behavior are reliable.
 
-## Set up locally
+## Architecture
 
-From the repository root on macOS or Linux:
+The project is organized around boundaries that keep core behavior independent of integrations:
+
+| Layer | Responsibility |
+| --- | --- |
+| Domain | Intent kinds, states, conditions, deadlines, and execution records |
+| Application | Lifecycle rules, validation, authorization, and orchestration |
+| Persistence | Intent state, transition history, and recovery |
+| Runtime | Eligibility checks, scheduling, and execution coordination |
+| Device adapters | A consistent interface to simulated and real devices |
+| MCP and planner | External tools and structured natural-language proposals |
+
+The LLM planner must not mutate storage directly or control devices outside the application and execution layers.
+
+## Technology
+
+- Python 3.11+
+- Pydantic 2 for validated domain models
+- SQLite for initial persistence
+- Official Python MCP SDK for the planned MCP interface
+- pytest for automated tests
+
+## Development
+
+Create and activate a virtual environment, then install the project and development dependencies:
 
 ```bash
 python3 -m venv .venv
@@ -43,26 +64,12 @@ source .venv/bin/activate
 python -m pip install -e '.[dev]'
 ```
 
-If the virtual environment already exists, activate it with `source .venv/bin/activate` before using `python` or `pytest`.
-
-## Run the tests
+Run the test suite with:
 
 ```bash
 python -m pytest -q
 ```
 
-## Persistence notes
+## Project status
 
-`SQLiteIntentRepository` initializes a versioned SQLite schema when it is constructed. It stores intent data in `intents` and lifecycle history in `intent_transitions`. Pass a database path to the repository; for example:
-
-```python
-from home_intelligence_engine.persistence import SQLiteIntentRepository
-
-repository = SQLiteIntentRepository("home_intelligence.sqlite3")
-```
-
-The repository exposes `add`, `get`, `list_active`, `save_transition`, and `list_transitions`. Callers currently apply lifecycle methods on an `Intent` and then persist a status change with `save_transition`, providing the prior status and a timezone-aware transition time. Active records can be loaded with `list_active()` after an application restart. Expiry is refreshed by the lifecycle methods or `refresh_expiry()`; there is not yet a background scheduler.
-
-## Development direction
-
-The next milestone is a vertical slice through a simulated device: accept a structured one-time intent, validate eligibility, execute a simulated action, and record its outcome. Conditional automations, temporary overrides, MCP integration, and natural-language planning will follow after the execution foundation is in place.
+The repository is under active development. The current foundation includes typed intent kinds and statuses, lifecycle validation, timezone-aware expiry handling, and a SQLite repository with active-intent recovery and transition history. Device execution, condition evaluation, conflict resolution, MCP tools, and natural-language planning remain planned capabilities.
