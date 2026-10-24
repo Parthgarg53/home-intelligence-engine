@@ -46,12 +46,22 @@ The project is organized around boundaries that keep core behavior independent o
 
 The LLM planner must not mutate storage directly or control devices outside the application and execution layers.
 
+## MCP server
+
+The MCP server exposes the same application services used by the Python interface. With the virtual environment active, start it over stdio with:
+
+```bash
+python -m home_intelligence_engine.mcp_server
+```
+
+It registers a simulated `living-room-light` device and stores data in `home_intelligence.sqlite3` in the current directory. Set `HOME_INTELLIGENCE_DB` to use a different SQLite path. Available tools cover creating one-time and conditional intents, persistent automations and temporary overrides; listing and inspecting intents; cancelling; executing eligible intents; evaluating automations with supplied observations; and activating overrides.
+
 ## Technology
 
 - Python 3.11+
 - Pydantic 2 for validated domain models
 - SQLite for initial persistence
-- Official Python MCP SDK for the planned MCP interface
+- Official Python MCP SDK for the MCP interface
 - pytest for automated tests
 
 ## Development
@@ -70,6 +80,42 @@ Run the test suite with:
 python -m pytest -q
 ```
 
+## Try the simulated light flow
+
+The current vertical slice accepts a structured one-time intent, runs it against an in-memory simulated light, and persists the execution result and lifecycle transition:
+
+```python
+from uuid import uuid4
+
+from home_intelligence_engine.devices import SimulatedLight
+from home_intelligence_engine.execution import ExecutionService
+from home_intelligence_engine.intent import Intent, IntentKind
+from home_intelligence_engine.persistence import SQLiteIntentRepository
+
+repository = SQLiteIntentRepository("home_intelligence.sqlite3")
+intent = Intent(
+    id=str(uuid4()),
+    description="Turn off the living room light",
+    kind=IntentKind.ONE_TIME,
+)
+repository.add(intent)
+
+result = ExecutionService(repository).execute(
+    intent.id,
+    SimulatedLight(),
+    "turn_off",
+)
+print(result.explanation)
+```
+
+Expected output:
+
+```text
+living-room-light is off
+```
+
 ## Project status
 
-The repository is under active development. The current foundation includes typed intent kinds and statuses, lifecycle validation, timezone-aware expiry handling, and a SQLite repository with active-intent recovery and transition history. Device execution, condition evaluation, conflict resolution, MCP tools, and natural-language planning remain planned capabilities.
+The repository is under active development. The current foundation includes typed intent kinds and statuses, lifecycle validation, timezone-aware expiry handling, and a versioned SQLite repository with active-intent recovery, transition history, and execution records. One-time and conditional one-shot requests can execute against a simulated light. Persistent automations are evaluated on demand and fire once per false-to-true condition edge. Temporary overrides execute an action, suppress competing engine actions for that device, and expire durably; after expiry, matching automations are re-armed for their next evaluation. An MCP server exposes these shared application services.
+
+Condition observations are currently supplied by the caller; there is no sensor integration or background scheduler. Persistent automations use an explicit no-automatic-retry policy: a failed or interrupted attempt is recorded and requires the condition to reset before another attempt. Real device integrations and natural-language planning remain planned capabilities.

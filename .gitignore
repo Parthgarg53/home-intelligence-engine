@@ -9,6 +9,10 @@ __pycache__/
 # Test cache
 .pytest_cache/
 
+# Local application databases
+*.sqlite3
+*.db
+
 # Environment variables and secrets
 .env
 .env.*

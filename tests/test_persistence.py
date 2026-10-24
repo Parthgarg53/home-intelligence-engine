@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import sqlite3
 
 import pytest
 
@@ -69,3 +70,44 @@ def test_stale_transition_does_not_overwrite_persisted_state(tmp_path):
 
     assert repository.get(intent.id).status == IntentStatus.CANCELLED
     assert len(repository.list_transitions(intent.id)) == 1
+
+
+def test_existing_schema_version_two_migrates_without_losing_intents(tmp_path):
+    database = tmp_path / "intents.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE intents (
+                id TEXT PRIMARY KEY, description TEXT NOT NULL, kind TEXT NOT NULL,
+                status TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT
+            );
+            CREATE TABLE intent_transitions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                intent_id TEXT NOT NULL REFERENCES intents(id),
+                from_status TEXT NOT NULL, to_status TEXT NOT NULL, changed_at TEXT NOT NULL
+            );
+            CREATE INDEX idx_intents_status ON intents(status);
+            CREATE TABLE execution_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                intent_id TEXT NOT NULL REFERENCES intents(id),
+                device_id TEXT NOT NULL, action TEXT NOT NULL, status TEXT NOT NULL,
+                requested_at TEXT NOT NULL, finished_at TEXT, result TEXT
+            );
+            CREATE INDEX idx_executions_intent ON execution_records(intent_id, id);
+            PRAGMA user_version = 2;
+            """
+        )
+        connection.execute(
+            """INSERT INTO intents
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                "existing-intent", "Keep light active", "one_time", "active",
+                "2030-01-01T00:00:00+00:00", None,
+            ),
+        )
+
+    repository = SQLiteIntentRepository(database)
+
+    assert repository.get("existing-intent").description == "Keep light active"
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 4

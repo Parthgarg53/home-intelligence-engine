@@ -1,6 +1,7 @@
 
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Any, Mapping
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -19,6 +20,50 @@ class IntentStatus(str, Enum):
     EXPIRED = "expired"
 
 
+class ConditionOperator(str, Enum):
+    EQ = "eq"
+    NE = "ne"
+    GT = "gt"
+    GTE = "gte"
+    LT = "lt"
+    LTE = "lte"
+
+
+class ConditionEvaluationError(ValueError):
+    """Raised when a condition cannot be evaluated from available observations."""
+
+
+class Condition(BaseModel):
+    fact: str
+    operator: ConditionOperator
+    value: str | int | float | bool
+
+    def evaluate(self, observations: Mapping[str, Any]) -> bool:
+        if self.fact not in observations:
+            raise ConditionEvaluationError(f"No observation available for {self.fact}")
+        actual = observations[self.fact]
+        if self.operator == ConditionOperator.EQ:
+            return actual == self.value
+        if self.operator == ConditionOperator.NE:
+            return actual != self.value
+        if (
+            not isinstance(actual, (int, float))
+            or isinstance(actual, bool)
+            or not isinstance(self.value, (int, float))
+            or isinstance(self.value, bool)
+        ):
+            raise ConditionEvaluationError(
+                f"Condition {self.fact} with {self.operator.value} requires numeric values"
+            )
+        if self.operator == ConditionOperator.GT:
+            return actual > self.value
+        if self.operator == ConditionOperator.GTE:
+            return actual >= self.value
+        if self.operator == ConditionOperator.LT:
+            return actual < self.value
+        return actual <= self.value
+
+
 class Intent(BaseModel):
     id: str
     description: str
@@ -28,6 +73,9 @@ class Intent(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc)
     )
     expires_at: datetime | None = None
+    condition: Condition | None = None
+    target_device_id: str | None = None
+    action: str | None = None
 
     @model_validator(mode="after")
     def validate_expiry(self):
