@@ -15,9 +15,17 @@ from home_intelligence_engine.application import (
 from home_intelligence_engine.devices import SimulatedLight
 from home_intelligence_engine.intent import Condition, ConditionOperator
 from home_intelligence_engine.persistence import SQLiteIntentRepository
+from home_intelligence_engine.planner import (
+    IntentPlanningService,
+    OpenAIIntentPlanner,
+    PlannerResponse,
+)
 
 
-def create_mcp_server(service: IntentApplicationService | None = None) -> MCPServer:
+def create_mcp_server(
+    service: IntentApplicationService | None = None,
+    planning: IntentPlanningService | None = None,
+) -> MCPServer:
     if service is None:
         repository_path = Path(
             os.environ.get("HOME_INTELLIGENCE_DB", "home_intelligence.sqlite3")
@@ -25,6 +33,15 @@ def create_mcp_server(service: IntentApplicationService | None = None) -> MCPSer
         repository = SQLiteIntentRepository(repository_path)
         light = SimulatedLight()
         service = IntentApplicationService(repository, {light.device_id: light})
+
+    if planning is None:
+        model = os.environ.get("HOME_INTELLIGENCE_LLM_MODEL")
+        if model and os.environ.get("OPENAI_API_KEY"):
+            planning = IntentPlanningService(
+                OpenAIIntentPlanner(model),
+                service,
+                timezone_name=os.environ.get("HOME_INTELLIGENCE_TIMEZONE", "UTC"),
+            )
 
     server = MCPServer(
         "Home Intelligence Engine",
@@ -126,11 +143,29 @@ def create_mcp_server(service: IntentApplicationService | None = None) -> MCPSer
         """Run an override's action; it remains active until its expiry."""
         return outcome_to_dict(service.activate_override(intent_id))
 
+    if planning is not None:
+
+        @server.tool()
+        def plan_natural_language_intent(request: str) -> dict:
+            """Propose an intent or ask clarifying questions without saving or executing it."""
+            return planning.propose(request).model_dump(mode="json")
+
+        @server.tool()
+        def accept_intent_proposal(proposal_json: str) -> dict:
+            """Validate and save a reviewed proposal; this tool does not execute it."""
+            response = PlannerResponse.model_validate_json(proposal_json)
+            return intent_to_dict(planning.accept(response))
+
     return server
 
 
+# The MCP CLI's `mcp dev` command discovers a module-level server object.
+# Keep the factory available for tests and custom application wiring.
+mcp = create_mcp_server()
+
+
 def main() -> None:
-    create_mcp_server().run(transport="stdio")
+    mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":

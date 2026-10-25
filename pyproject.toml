@@ -15,6 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+llm = ["openai>=2.0.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

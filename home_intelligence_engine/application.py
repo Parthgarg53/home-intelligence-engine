@@ -26,7 +26,13 @@ class IntentApplicationService:
         self.automation = AutomationService(repository)
         self.overrides = OverrideService(repository)
 
-    def create_one_time(self, description: str, device_id: str, action: str) -> Intent:
+    def create_one_time(
+        self,
+        description: str,
+        device_id: str,
+        action: str,
+        expires_at: datetime | None = None,
+    ) -> Intent:
         self._require_device(device_id)
         intent = Intent(
             id=str(uuid4()),
@@ -34,6 +40,7 @@ class IntentApplicationService:
             kind=IntentKind.ONE_TIME,
             target_device_id=device_id,
             action=action,
+            expires_at=expires_at,
         )
         self.repository.add(intent)
         return intent
@@ -146,6 +153,10 @@ class IntentApplicationService:
             return self.devices[device_id]
         except KeyError as error:
             raise ValueError(f"Device {device_id} is not registered") from error
+
+    def device_for(self, device_id: str) -> Device:
+        """Return a registered adapter for validation by application features."""
+        return self._require_device(device_id)
 
     @staticmethod
     def _action_details(intent: Intent) -> tuple[str, str]:

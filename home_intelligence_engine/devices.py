@@ -5,6 +5,7 @@ from typing import Protocol
 
 class Device(Protocol):
     device_id: str
+    supported_actions: frozenset[str]
 
     def execute(self, action: str) -> str:
         """Execute a supported action and return a verified outcome description."""
@@ -16,6 +17,7 @@ class SimulatedLight:
     def __init__(self, device_id: str = "living-room-light", is_on: bool = True):
         self.device_id = device_id
         self.is_on = is_on
+        self.supported_actions = frozenset({"turn_on", "turn_off"})
 
     def execute(self, action: str) -> str:
         if action == "turn_on":

@@ -56,12 +56,29 @@ python -m home_intelligence_engine.mcp_server
 
 It registers a simulated `living-room-light` device and stores data in `home_intelligence.sqlite3` in the current directory. Set `HOME_INTELLIGENCE_DB` to use a different SQLite path. Available tools cover creating one-time and conditional intents, persistent automations and temporary overrides; listing and inspecting intents; cancelling; executing eligible intents; evaluating automations with supplied observations; and activating overrides.
 
+### Optional natural-language planner
+
+The OpenAI planner returns a structured proposal or clarification questions. It does not write to storage or execute a device action. The MCP `accept_intent_proposal` tool validates and saves a reviewed proposal; execution is a separate operation.
+
+Install the optional provider dependency and configure an API key and model before starting the server:
+
+```bash
+python -m pip install -e '.[llm]'
+export OPENAI_API_KEY="your-api-key"
+export HOME_INTELLIGENCE_LLM_MODEL="your-enabled-model"
+export HOME_INTELLIGENCE_TIMEZONE="Asia/Kolkata"
+python -m home_intelligence_engine.mcp_server
+```
+
+The planner tools are registered only when both `OPENAI_API_KEY` and `HOME_INTELLIGENCE_LLM_MODEL` are set. `HOME_INTELLIGENCE_TIMEZONE` defaults to UTC and is used to resolve relative times in proposals.
+
 ## Technology
 
 - Python 3.11+
 - Pydantic 2 for validated domain models
 - SQLite for initial persistence
 - Official Python MCP SDK for the MCP interface
+- OpenAI Python SDK as an optional dependency for natural-language planning
 - pytest for automated tests
 
 ## Development
@@ -118,4 +135,4 @@ living-room-light is off
 
 The repository is under active development. The current foundation includes typed intent kinds and statuses, lifecycle validation, timezone-aware expiry handling, and a versioned SQLite repository with active-intent recovery, transition history, and execution records. One-time and conditional one-shot requests can execute against a simulated light. Persistent automations are evaluated on demand and fire once per false-to-true condition edge. Temporary overrides execute an action, suppress competing engine actions for that device, and expire durably; after expiry, matching automations are re-armed for their next evaluation. An MCP server exposes these shared application services.
 
-Condition observations are currently supplied by the caller; there is no sensor integration or background scheduler. Persistent automations use an explicit no-automatic-retry policy: a failed or interrupted attempt is recorded and requires the condition to reset before another attempt. Real device integrations and natural-language planning remain planned capabilities.
+Condition observations are currently supplied by the caller; there is no sensor integration or background scheduler. Persistent automations use an explicit no-automatic-retry policy: a failed or interrupted attempt is recorded and requires the condition to reset before another attempt. An optional OpenAI-backed planner proposes structured intents and clarification questions; it requires the user to configure credentials and a model, and its live API path has not been exercised by the offline test suite. Real device integrations and a user-facing dashboard remain planned capabilities.
